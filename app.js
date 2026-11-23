@@ -467,3 +467,173 @@ async function render(skipData = false) {
   const route = routeFromLocation();
   if (route !== 'reportar') {
     if ($('#picker-panel')?.classList.contains('expanded')) setPickerExpanded(false);
+    clearReportPhoto();
+  }
+  if (route === 'salir') {
+    try { await api('/api/logout', { method: 'POST' }); } catch {}
+    S.user = null; S.reports = []; S.users = []; localStorage.removeItem('cs_user'); history.replaceState({}, '', '#/'); return render();
+  }
+  if (!S.user) S.reports = [];
+  const app = $('#app');
+  if (route.startsWith('muni')) {
+    if (!isStaff()) { return go('/ingresar', true); }
+    app.innerHTML = muniShell(route, route === 'muni/reportes' ? mReportes() : route === 'muni/usuarios' ? mUsuarios() : mResumen());
+  } else {
+    const v = { '': vInicio, mapa: vMapa, reportar: vReportar, perfil: vPerfil, ingresar: vLogin, registrar: vRegister }[route] || vInicio;
+    app.innerHTML = shell(route, v());
+    if (route === 'reportar') { setEmergencyService(); setCategoryOptions(S.form.category); setCustomCategory(); setReportPhotoVisibility(); }
+  }
+  initMaps();
+  document.querySelectorAll('#passkey-login, #register-passkey').forEach(button => button.remove());
+  if (route !== lastRoute) window.scrollTo(0, 0);
+  lastRoute = route;
+  if (S.user && !skipData) {
+    let shouldRefreshView = route === '' || route === 'mapa' || route.startsWith('muni');
+    const requests = [api('/api/reports').then(reports => {
+      if (generation === renderGeneration && routeFromLocation() === route) S.reports = reports;
+    }).catch(error => {
+      if (generation !== renderGeneration || routeFromLocation() !== route) return;
+      if (error.status === 401 || error.status === 403) {
+        shouldRefreshView = true;
+        S.user = null;
+        S.reports = [];
+        S.users = [];
+        localStorage.removeItem('cs_user');
+      } else {
+        toast(error.message);
+      }
+    })];
+    if (route === 'muni/usuarios') {
+      requests.push(api('/api/users?email=' + encodeURIComponent(S.user.email)).then(users => {
+        if (generation === renderGeneration && routeFromLocation() === route) S.users = users;
+      }).catch(error => {
+        if (generation === renderGeneration && routeFromLocation() === route && error.status !== 401 && error.status !== 403) toast(error.message);
+      }));
+    }
+    Promise.all(requests).then(() => {
+      if (shouldRefreshView && generation === renderGeneration && routeFromLocation() === route) render(true);
+    });
+  }
+}
+
+/* ---------- eventos ---------- */
+document.addEventListener('click', async e => {
+  const t = e.target;
+  const link = t.closest('a[href]');
+  if (link && link.origin === location.origin && link.getAttribute('href').startsWith('#/')) {
+    e.preventDefault();
+    if (link.matches('[data-clear]')) S.sel = null;
+    go(link.getAttribute('href').slice(1));
+    return;
+  }
+  const pin = t.closest('[data-pin]');
+  if (pin) { S.sel = +pin.dataset.pin; render(); return; }
+  if (t.closest('[data-clear]')) { S.sel = null; }
+  const nextStep = t.closest('[data-report-next]');
+  if (nextStep) {
+    if (nextStep.dataset.reportNext === '2' && $('#cat')?.value === 'Otro' && !$('#customcat')?.value.trim()) {
+      toast('Escribe la categoría');
+      $('#customcat').focus();
+      return;
+    }
+    setReportStep(+nextStep.dataset.reportNext);
+    return;
+  }
+  const backStep = t.closest('[data-report-back]');
+  if (backStep) { setReportStep(+backStep.dataset.reportBack); return; }
+  const photoButton = t.closest('[data-view-photo]');
+  if (photoButton) { await showReportPhoto(photoButton); return; }
+  const fl = t.closest('[data-filter]');
+  if (fl) { S.filter = fl.dataset.filter; S.sel = null; render(); return; }
+  const ty = t.closest('[data-type]');
+  if (ty) {
+    saveReportForm();
+    S.type = ty.dataset.type;
+    document.querySelectorAll('[data-type]').forEach(b => b.classList.toggle('on', b === ty));
+    document.querySelectorAll('.report-submit').forEach(button => {
+      button.classList.remove('em', 'pr');
+      button.classList.add(S.type);
+    });
+    setEmergencyService();
+    setCategoryOptions();
+    setCustomCategory();
+    setReportPhotoVisibility();
+    return;
+  }
+  if (t.closest('#open-picker')) { setPickerExpanded(true); return; }
+  if (t.closest('#close-picker')) { setPickerExpanded(false); return; }
+  if (t.closest('[data-remove-photo]')) { clearReportPhoto(); return; }
+  if (t.closest('[data-stop-tracking]')) { stopLiveTracking(); render(); return; }
+  if (t.closest('#usegps')) { useGps(); return; }
+  const bl = t.closest('[data-block]');
+  if (bl) {
+    try { await api(`/api/users/${bl.dataset.block}/block`, { method: 'POST', body: { email: S.user.email, blocked: +bl.dataset.to } }); toast('Usuario actualizado'); render(); } catch (err) { toast(err.message); }
+  }
+});
+document.addEventListener('change', async e => {
+  if (e.target.id === 'report-photo') {
+    const file = e.target.files?.[0];
+    if (!file) { clearReportPhoto(); return; }
+    if (file.size > 5 * 1024 * 1024) { clearReportPhoto(); toast('La foto no debe superar 5 MB'); return; }
+    if (file.type && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      clearReportPhoto();
+      toast('Usa una foto JPG, PNG o WebP');
+      return;
+    }
+    S.photo = file;
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    photoPreviewUrl = URL.createObjectURL(file);
+    $('#photo-preview').src = photoPreviewUrl;
+    $('#photo-preview-wrap').hidden = false;
+    return;
+  }
+  if (e.target.id === 'service') { saveReportForm(); setCategoryOptions(); setCustomCategory(); setReportPhotoVisibility(); return; }
+  if (e.target.id === 'cat') { saveReportForm(); setCustomCategory(); return; }
+  const sel = e.target.closest('[data-status]');
+  if (!sel) return;
+  try { await api(`/api/reports/${sel.dataset.status}/status`, { method: 'POST', body: { email: S.user.email, status: sel.value } }); toast('Estado actualizado'); render(); } catch (err) { toast(err.message); }
+});
+document.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (e.target.id === 'lform') {
+    try {
+      S.user = await api('/api/login', { method: 'POST', body: { email: $('#em').value, password: $('#pw').value } });
+      localStorage.setItem('cs_user', JSON.stringify(S.user));
+      toast('Bienvenida/o, ' + (S.user.full_name || S.user.email));
+      go(isStaff() ? '/muni' : '/', true);
+    } catch (err) { toast(err.message); }
+  }
+  if (e.target.id === 'regform') {
+    try {
+      S.user = await api('/api/register', { method: 'POST', body: { full_name: $('#reg-name').value, email: $('#reg-em').value, password: $('#reg-pw').value } });
+      localStorage.setItem('cs_user', JSON.stringify(S.user));
+      toast('Cuenta creada correctamente');
+      go('/', true);
+    } catch (err) { toast(err.message); }
+  }
+  if (e.target.id === 'rform') {
+    if (!S.pick) { toast('Marca la ubicación en el mapa'); return; }
+    const category = $('#cat').value === 'Otro' ? $('#customcat').value.trim() : $('#cat').value;
+    if (!category) { toast('Escribe la categoría'); return; }
+    try {
+      const service = S.type === 'em' ? $('#service').value : '';
+      const report = { email: S.user.email, type: S.type, category, emergency_service: service, description: $('#desc').value, address: $('#addr').value, latitude: S.pick.lat, longitude: S.pick.lon };
+      let body = report;
+      if (S.photo) {
+        body = new FormData();
+        Object.entries(report).forEach(([key, value]) => body.append(key, String(value)));
+        body.append('photo', S.photo, S.photo.name);
+      }
+      const created = await api('/api/reports', { method: 'POST', body });
+      if (S.type === 'em' && category === 'Robo o asalto' && $('#track-location').checked) startLiveTracking(created.id);
+      S.pick = null; S.form = {}; clearReportPhoto(); toast('Reporte enviado. ¡Gracias!'); go('/mapa');
+    } catch (err) { toast(err.message); }
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#picker-panel')?.classList.contains('expanded')) { setPickerExpanded(false); return; }
+  if (e.key === 'Enter' && e.target.closest?.('[data-pin]')) e.target.closest('[data-pin]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+});
+window.addEventListener('hashchange', render);
+render().finally(() => setTimeout(() => $('#splash').classList.add('off'), 900));
+})();
