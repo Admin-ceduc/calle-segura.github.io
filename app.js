@@ -21,23 +21,70 @@ const STATUSES = ['Nuevo', 'Visto', 'En curso', 'Resuelto'];
 const LEBU_CENTER = [-37.6163, -73.6511];
 const B = { minLat: -37.66, maxLat: -37.57, minLon: -73.70, maxLon: -73.60 };
 const LEBU_BOUNDS = [[B.minLat, B.minLon], [B.maxLat, B.maxLon]];
-const S = { user: loadUser(), reports: [], users: [], filter: 'all', sel: null, type: 'em', pick: null, form: {}, tracking: null };
+const S = { user: loadUser(), reports: [], users: [], filter: 'all', sel: null, type: 'em', pick: null, photo: null, form: {}, tracking: null };
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const isStaff = () => S.user && ['staff', 'admin'].includes(S.user.role);
 
 async function api(path, opts) {
   if (API_UNCONFIGURED) throw new Error('El backend de Calle Segura todavía no está conectado.');
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = {};
   if (S.user?.token) headers.Authorization = `Bearer ${S.user.token}`;
-  const r = await fetch(API + path, opts ? { ...opts, headers, body: JSON.stringify(opts.body) } : { headers });
-  const d = await r.json().catch(() => ({}));
+  const fetchOptions = opts ? { ...opts, headers } : { headers };
+  if (opts?.body instanceof FormData) {
+    fetchOptions.body = opts.body;
+  } else if (opts?.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    fetchOptions.body = JSON.stringify(opts.body);
+  }
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  let r, d;
+  try {
+    fetchOptions.signal = controller.signal;
+    r = await fetch(API + path, fetchOptions);
+    d = await r.json().catch(error => {
+      if (error.name === 'AbortError') throw error;
+      return {};
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('El servidor tardó demasiado en responder. Intenta nuevamente.');
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
   if (!r.ok) {
     const error = new Error(d.error || 'Error de servidor');
     error.status = r.status;
     throw error;
   }
   return d;
+}
+async function showReportPhoto(button) {
+  const reportId = button.dataset.viewPhoto;
+  button.disabled = true;
+  try {
+    const headers = S.user?.token ? { Authorization: `Bearer ${S.user.token}` } : {};
+    const response = await fetch(`${API}/api/reports/${reportId}/photo`, { headers });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'No se pudo cargar la foto');
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const dialog = document.createElement('dialog');
+    dialog.className = 'photo-dialog';
+    dialog.innerHTML = '<button type="button" class="btn ghost sm photo-dialog-close">Cerrar</button><img alt="Foto adjunta al reporte">';
+    dialog.querySelector('img').src = url;
+    dialog.querySelector('.photo-dialog-close').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+    dialog.addEventListener('close', () => { URL.revokeObjectURL(url); dialog.remove(); }, { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 function toast(msg) {
   document.querySelector('.toast')?.remove();
@@ -79,7 +126,7 @@ function setPick(lat, lon, recenter) {
   saveReportForm();
   drawPick(recenter);
   const hint = $('#pickhint');
-  if (hint) hint.textContent = 'Ubicación marcada ✓. Toca otra vez para ajustar el punto.';
+  if (hint) hint.textContent = 'Punto marcado ✓. Arrastra para explorar y toca otro lugar para cambiarlo.';
 }
 function setPickerExpanded(expanded) {
   const panel = $('#picker-panel');
@@ -95,6 +142,8 @@ function setPickerExpanded(expanded) {
   }
   panel.classList.toggle('expanded', expanded);
   document.body.classList.toggle('map-expanded', expanded);
+  const openButton = $('#open-picker');
+  if (openButton) openButton.hidden = expanded;
   const closeButton = $('#close-picker');
   if (closeButton) closeButton.hidden = !expanded;
   if (expanded) {
@@ -159,7 +208,7 @@ const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 function shell(route, body) {
   const on = r => route === r ? 'on' : '';
   const who = S.user ? `<a class="ava" href="#/perfil" title="Ver perfil de ${esc(S.user.email)}" aria-label="Ver mi perfil">${esc(S.user.email[0].toUpperCase())}</a>` : '<a class="btn pr sm" href="#/ingresar">Ingresar</a>';
-  return `<header><div class="bar"><a class="logo" href="#/"><img src="logo-calle-segura.png" alt="Calle Segura"><span>Calle Segura</span></a>
+  return `<header><div class="bar"><a class="logo" href="#/"><img src="logo-mark.svg" alt=""><span>Calle Segura</span></a>
     <nav aria-label="Principal"><a class="${on('')}" href="#/">Inicio</a><a class="${on('mapa')}" href="#/mapa">Mapa</a><a class="${on('reportar')}" href="#/reportar">Reportar</a></nav>${who}</div></header>
     <main class="view">${body}</main>`;
 }
@@ -198,7 +247,8 @@ function vInicio() {
 }
 function reportCard(r) {
   const service = r.type === 'em' && r.emergency_service ? `<small>Servicio: ${esc(r.emergency_service)}</small>` : '';
-  return `<div class="card" data-card="${r.id}"><div class="top"><div>${tag(r)}</div><small>${ago(r.created_at)}</small></div><h3>${esc(r.category)}</h3>${service}<p>${esc(r.description || 'Sin descripción')}</p><small>${esc(r.address || 'Sin dirección')}</small></div>`;
+  const photo = r.has_photo && r.can_view_photo ? `<button type="button" class="btn ghost sm photo-view" data-view-photo="${r.id}">📷 Ver foto</button>` : '';
+  return `<div class="card" data-card="${r.id}"><div class="top"><div>${tag(r)}</div><small>${ago(r.created_at)}</small></div><h3>${esc(r.category)}</h3>${service}<p>${esc(r.description || 'Sin descripción')}</p><small>${esc(r.address || 'Sin dirección')}</small>${photo}</div>`;
 }
 function vMapa() {
   if (!S.user) return `<div class="auth box"><h2>Ingresa para reportar</h2><p class="hint">Inicia sesión para ver el mapa y gestionar tus reportes.</p><a class="btn full" style="margin-top:14px" href="#/ingresar">Ingresar</a></div>`;
@@ -216,16 +266,27 @@ function vReportar() {
   if (!S.user) return `<div class="auth box"><h2>Ingresa para reportar</h2><p class="hint">Necesitas una cuenta para que podamos hacer seguimiento.</p><a class="btn full" style="margin-top:14px" href="#/ingresar">Ingresar</a></div>`;
   const f = S.form;
   const categories = S.type === 'em' ? (CATS.em[f.service || 'Carabineros'] || CATS.em.Carabineros) : CATS.pr;
-  return `<h2>Nuevo <em>reporte</em></h2><div class="two"><form class="box" id="rform" novalidate>
+  return `<h2 id="report-title">Nuevo <em>reporte</em></h2>
+    <aside class="report-emergency" aria-label="Teléfonos de emergencia"><b>¿Emergencia inmediata?</b><span>Llama primero:</span><a href="tel:133">133 Carabineros</a><a href="tel:132">132 Bomberos</a><a href="tel:131">131 Ambulancia</a></aside>
+    <div class="report-progress" id="report-progress" aria-live="polite"><div class="report-progress-copy"><span id="report-step-current">1 de 3</span><b id="report-step-label">Tipo y categoría</b></div><div class="report-progress-track"><span id="report-progress-fill"></span></div></div>
+    <div class="two report-layout" id="report-layout" data-report-step="1"><form class="box report-form" id="rform" novalidate>
+    <section class="report-step" data-step="1" aria-label="Tipo y categoría">
     <label>Tipo</label><div class="types"><button type="button" class="em ${S.type === 'em' ? 'on' : ''}" data-type="em">🚨 Emergencia</button><button type="button" class="pr ${S.type === 'pr' ? 'on' : ''}" data-type="pr">🛠 Problema</button></div>
     <label for="cat">Categoría</label><select id="cat">${categories.map(c => `<option ${c === f.category ? 'selected' : ''}>${c}</option>`).join('')}</select>
     <input id="customcat" value="${esc(f.customCat || '')}" placeholder="Escribe la categoría" maxlength="80" hidden>
     <label id="service-label" for="service">Compañía o servicio de emergencia</label><select id="service">${SERVICES.map(service => `<option ${service === (f.service || 'Carabineros') ? 'selected' : ''}>${service}</option>`).join('')}</select>
+    <div class="report-step-nav"><button class="btn ghost" type="button" data-report-back="1" hidden>Volver</button><button class="btn" type="button" data-report-next="2">Continuar</button></div>
+    </section>
+    <section class="report-step" data-step="2" aria-label="Detalles del reporte">
     <label for="desc">Descripción (opcional)</label><textarea id="desc" placeholder="Agrega detalles si los tienes">${esc(f.desc || '')}</textarea>
     <label for="addr">Dirección o referencia</label><input id="addr" value="${esc(f.addr || '')}" placeholder="Ej: Calle Prat con Calle Lira">
-    <label class="hint"><input id="track-location" type="checkbox" ${f.track ? 'checked' : ''}> Si es un robo o asalto, compartir mi ubicación en vivo mientras la página esté abierta.</label>
-    <button class="btn full ${S.type}" style="margin-top:18px" type="submit">Enviar reporte</button></form>
-    <div class="box picker-panel" id="picker-panel"><div class="picker-head"><h3>Marca la ubicación</h3><button type="button" class="btn ghost sm" id="close-picker" hidden>Volver al formulario</button></div><button type="button" class="btn gps" id="usegps">⌖ Usar mi ubicación</button>${mapHTML('picker')}<p class="hint" id="pickhint">${S.pick ? 'Ubicación marcada ✓. Toca otra vez para ajustar el punto.' : 'Toca el mapa para ampliarlo y marcar dónde ocurre.'}</p></div></div>`;
+    <label class="hint report-track-label"><input id="track-location" type="checkbox" ${f.track ? 'checked' : ''}> Si es un robo o asalto, compartir mi ubicación en vivo mientras la página esté abierta.</label>
+    <div class="photo-upload" id="photo-field" hidden><label for="report-photo">Foto del lugar (opcional)</label><p class="hint">Disponible para Bomberos o reportes de Problema. Puedes tomarla ahora o elegirla desde tu galería. Máximo 5 MB; JPG, PNG o WebP.</p><input id="report-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment"><div class="photo-preview" id="photo-preview-wrap" hidden><img id="photo-preview" alt="Vista previa de la foto del reporte"><button class="btn ghost sm" type="button" data-remove-photo>Quitar foto</button></div></div>
+    <div class="report-step-nav"><button class="btn ghost" type="button" data-report-back="1">Volver</button><button class="btn" type="button" data-report-next="3">Elegir ubicación</button></div>
+    </section>
+    <button class="btn full report-submit report-submit-desktop ${S.type}" style="margin-top:18px" type="submit">Enviar reporte</button></form>
+    <div class="box picker-panel" id="picker-panel"><div class="picker-head"><h3>Marca la ubicación</h3><div class="picker-head-actions"><button type="button" class="btn ghost sm" id="open-picker">Ampliar mapa</button><button type="button" class="btn ghost sm" id="close-picker" hidden>Cerrar mapa</button></div></div><button type="button" class="btn gps" id="usegps">⌖ Usar mi ubicación</button>${mapHTML('picker')}<p class="hint" id="pickhint">${S.pick ? 'Punto marcado ✓. Arrastra para explorar y toca otro lugar para cambiarlo.' : 'Toca el mapa para ampliarlo y marcar ese punto. También puedes usar «Ampliar mapa» y elegirlo después.'}</p>
+    <div class="report-mobile-actions"><button class="btn ghost" type="button" data-report-back="2">Volver a detalles</button><button class="btn full report-submit ${S.type}" type="submit" form="rform">Enviar reporte</button></div></div></div>`;
 }
 function setCustomCategory() {
   const select = $('#cat'), input = $('#customcat');
@@ -235,6 +296,25 @@ function setCustomCategory() {
   input.required = custom;
   if (!custom) input.value = '';
 }
+function clearReportPhoto() {
+  S.photo = null;
+  if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+  photoPreviewUrl = null;
+  const input = $('#report-photo');
+  if (input) input.value = '';
+  const preview = $('#photo-preview');
+  if (preview) { preview.removeAttribute('src'); preview.hidden = true; }
+  const previewWrap = $('#photo-preview-wrap');
+  if (previewWrap) previewWrap.hidden = true;
+}
+function setReportPhotoVisibility() {
+  const field = $('#photo-field');
+  if (!field) return;
+  const allowed = S.type === 'pr' || $('#service')?.value === 'Bomberos';
+  field.hidden = !allowed;
+  if (!allowed) clearReportPhoto();
+}
+let photoPreviewUrl = null;
 function setEmergencyService() {
   const label = $('#service-label'), select = $('#service');
   if (!label || !select) return;
@@ -253,6 +333,23 @@ function setCategoryOptions(selected = '') {
 }
 function saveReportForm() {
   S.form = { desc: $('#desc')?.value || '', addr: $('#addr')?.value || '', customCat: $('#customcat')?.value || '', service: $('#service')?.value || '', category: $('#cat')?.value || '', track: $('#track-location')?.checked || false };
+}
+function setReportStep(step) {
+  const layout = $('#report-layout');
+  if (!layout) return;
+  saveReportForm();
+  layout.dataset.reportStep = String(step);
+  const labels = { 1: 'Tipo y categoría', 2: 'Detalles', 3: 'Ubicación' };
+  const current = $('#report-step-current');
+  const label = $('#report-step-label');
+  const progress = $('#report-progress-fill');
+  if (current) current.textContent = `${step} de 3`;
+  if (label) label.textContent = labels[step];
+  if (progress) progress.style.width = `${step / 3 * 100}%`;
+  if (window.matchMedia('(max-width: 860px)').matches) {
+    window.scrollTo({ top: $('#report-title').offsetTop, behavior: 'smooth' });
+  }
+  window.setTimeout(() => pickMap?.invalidateSize(), 0);
 }
 function useGps() {
   if (!navigator.geolocation) { toast('Este navegador no permite usar GPS'); return; }
@@ -344,9 +441,9 @@ function mResumen() {
     <div class="box" style="margin-top:16px"><h3>Mapa</h3>${mapHTML('all')}</div>`;
 }
 function mReportes() {
-  return `<h2>Reportes</h2><p class="hint">Cambia el estado para que los vecinos vean el avance.</p><div class="scroll"><table><thead><tr><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Ubicación</th><th>Hace</th><th>Estado</th></tr></thead><tbody>
+  return `<h2>Reportes</h2><p class="hint">Cambia el estado para que los vecinos vean el avance.</p><div class="scroll"><table><thead><tr><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Ubicación</th><th>Hace</th><th>Foto</th><th>Estado</th></tr></thead><tbody>
     ${S.reports.map(r => `<tr><td><span class="tag t-${r.type}">${r.type === 'em' ? 'Emergencia' : 'Problema'}</span></td><td>${esc(r.category)}${r.type === 'em' && r.emergency_service ? `<br><small class="hint">${esc(r.emergency_service)}</small>` : ''}</td><td>${esc(r.description || 'Sin descripción')}</td><td>${esc(r.address || 'Sin dirección')}<br><a class="hint" href="https://www.openstreetmap.org/?mlat=${encodeURIComponent(r.latitude)}&mlon=${encodeURIComponent(r.longitude)}#map=18/${encodeURIComponent(r.latitude)}/${encodeURIComponent(r.longitude)}" target="_blank" rel="noopener">Ver en mapa</a></td><td>${ago(r.created_at)}</td>
-    <td><select data-status="${r.id}" aria-label="Estado">${STATUSES.map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`;
+    <td>${r.has_photo && r.can_view_photo ? `<button type="button" class="btn ghost sm photo-view" data-view-photo="${r.id}">Ver foto</button>` : '—'}</td><td><select data-status="${r.id}" aria-label="Estado">${STATUSES.map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`;
 }
 function mUsuarios() {
   return `<h2>Usuarios</h2><div class="scroll" style="margin-top:12px"><table><thead><tr><th>Correo</th><th>Rol</th><th>Reportes</th><th></th></tr></thead><tbody>
@@ -364,106 +461,9 @@ function go(path, replace = false) {
   history[replace ? 'replaceState' : 'pushState']({}, '', `#/${route}`);
   return render();
 }
-let lastRoute = null;
-async function render() {
+let lastRoute = null, renderGeneration = 0;
+async function render(skipData = false) {
+  const generation = ++renderGeneration;
   const route = routeFromLocation();
-  if (route === 'salir') {
-    try { await api('/api/logout', { method: 'POST' }); } catch {}
-    S.user = null; localStorage.removeItem('cs_user'); history.replaceState({}, '', '#/'); return render();
-  }
-  S.reports = [];
-  if (S.user) {
-    try { S.reports = await api('/api/reports'); } catch (error) {
-      if (error.status === 401 || error.status === 403) {
-        S.user = null;
-        localStorage.removeItem('cs_user');
-        if (route !== 'ingresar') { return go('/ingresar', true); }
-      } else {
-        toast(error.message);
-      }
-    }
-  }
-  const app = $('#app');
-  if (route.startsWith('muni')) {
-    if (!isStaff()) { return go('/ingresar', true); }
-    if (route === 'muni/usuarios') try { S.users = await api('/api/users?email=' + encodeURIComponent(S.user.email)); } catch (e) { toast(e.message); }
-    app.innerHTML = muniShell(route, route === 'muni/reportes' ? mReportes() : route === 'muni/usuarios' ? mUsuarios() : mResumen());
-  } else {
-    const v = { '': vInicio, mapa: vMapa, reportar: vReportar, perfil: vPerfil, ingresar: vLogin, registrar: vRegister }[route] || vInicio;
-    app.innerHTML = shell(route, v());
-    if (route === 'reportar') { setEmergencyService(); setCategoryOptions(S.form.category); setCustomCategory(); }
-  }
-  initMaps();
-  document.querySelectorAll('#passkey-login, #register-passkey').forEach(button => button.remove());
-  if (route !== lastRoute) window.scrollTo(0, 0);
-  lastRoute = route;
-}
-
-/* ---------- eventos ---------- */
-document.addEventListener('click', async e => {
-  const t = e.target;
-  const link = t.closest('a[href]');
-  if (link && link.origin === location.origin && link.getAttribute('href').startsWith('#/')) {
-    e.preventDefault();
-    if (link.matches('[data-clear]')) S.sel = null;
-    go(link.getAttribute('href').slice(1));
-    return;
-  }
-  const pin = t.closest('[data-pin]');
-  if (pin) { S.sel = +pin.dataset.pin; render(); return; }
-  if (t.closest('[data-clear]')) { S.sel = null; }
-  const fl = t.closest('[data-filter]');
-  if (fl) { S.filter = fl.dataset.filter; S.sel = null; render(); return; }
-  const ty = t.closest('[data-type]');
-  if (ty) {
-    saveReportForm();
-    S.type = ty.dataset.type;
-    document.querySelectorAll('[data-type]').forEach(b => b.classList.toggle('on', b === ty));
-    $('#rform button[type=submit]').className = 'btn full ' + S.type;
-    setEmergencyService();
-    setCategoryOptions();
-    setCustomCategory();
-    return;
-  }
-  if (t.closest('#close-picker')) { setPickerExpanded(false); return; }
-  if (t.closest('[data-stop-tracking]')) { stopLiveTracking(); render(); return; }
-  if (t.closest('#usegps')) { useGps(); return; }
-  const bl = t.closest('[data-block]');
-  if (bl) {
-    try { await api(`/api/users/${bl.dataset.block}/block`, { method: 'POST', body: { email: S.user.email, blocked: +bl.dataset.to } }); toast('Usuario actualizado'); render(); } catch (err) { toast(err.message); }
-  }
-});
-document.addEventListener('change', async e => {
-  if (e.target.id === 'service') { saveReportForm(); setCategoryOptions(); setCustomCategory(); return; }
-  if (e.target.id === 'cat') { saveReportForm(); setCustomCategory(); return; }
-  const sel = e.target.closest('[data-status]');
-  if (!sel) return;
-  try { await api(`/api/reports/${sel.dataset.status}/status`, { method: 'POST', body: { email: S.user.email, status: sel.value } }); toast('Estado actualizado'); render(); } catch (err) { toast(err.message); }
-});
-document.addEventListener('submit', async e => {
-  e.preventDefault();
-  if (e.target.id === 'lform') {
-    try {
-      S.user = await api('/api/login', { method: 'POST', body: { email: $('#em').value, password: $('#pw').value } });
-      localStorage.setItem('cs_user', JSON.stringify(S.user));
-      toast('Bienvenida/o, ' + (S.user.full_name || S.user.email));
-      go(isStaff() ? '/muni' : '/', true);
-    } catch (err) { toast(err.message); }
-  }
-  if (e.target.id === 'regform') {
-    try {
-      S.user = await api('/api/register', { method: 'POST', body: { full_name: $('#reg-name').value, email: $('#reg-em').value, password: $('#reg-pw').value } });
-      localStorage.setItem('cs_user', JSON.stringify(S.user));
-      toast('Cuenta creada correctamente');
-      go('/', true);
-    } catch (err) { toast(err.message); }
-  }
-  if (e.target.id === 'rform') {
-    if (!S.pick) { toast('Marca la ubicación en el mapa'); return; }
-    const category = $('#cat').value === 'Otro' ? $('#customcat').value.trim() : $('#cat').value;
-    if (!category) { toast('Escribe la categoría'); return; }
-    try {
-      const service = S.type === 'em' ? $('#service').value : '';
-      const created = await api('/api/reports', { method: 'POST', body: { email: S.user.email, type: S.type, category, emergency_service: service, description: $('#desc').value, address: $('#addr').value, latitude: S.pick.lat, longitude: S.pick.lon } });
-      if (S.type === 'em' && category === 'Robo o asalto' && $('#track-location').checked) startLiveTracking(created.id);
-      S.pick = null; S.form = {}; toast('Reporte enviado. ¡Gracias!'); go('/mapa');
+  if (route !== 'reportar') {
+    if ($('#picker-panel')?.classList.contains('expanded')) setPickerExpanded(false);
