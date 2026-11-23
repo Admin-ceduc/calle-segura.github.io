@@ -1,11 +1,11 @@
-const CACHE_NAME = 'calle-segura-v9';
+const CACHE_NAME = 'calle-segura-v10';
 const APP_BASE = self.registration.scope;
 const appAsset = path => new URL(path, APP_BASE).href;
 const APP_SHELL = [
   appAsset(''),
   appAsset('index.html'),
-  appAsset('codigo.css?v=5'),
-  appAsset('app.js?v=13'),
+  appAsset('codigo.css?v=6'),
+  appAsset('app.js?v=14'),
   appAsset('logo-calle-segura.png'),
   appAsset('manifest.webmanifest')
 ];
