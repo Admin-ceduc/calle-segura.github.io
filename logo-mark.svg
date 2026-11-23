@@ -1,1 +1,19 @@
-blob:vscode-file://vscode-app/7a754aa8-3384-4dc0-b1b8-50a40da0e8f5
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+  <defs>
+    <linearGradient id="shield" x1="13" y1="8" x2="57" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35B8F3"/>
+      <stop offset="1" stop-color="#2463E8"/>
+    </linearGradient>
+    <linearGradient id="inside" x1="36" y1="14" x2="36" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#304C91"/>
+      <stop offset="1" stop-color="#122B68"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#shield)" d="M36 3 63 11v20c0 17-10 29-27 38C19 60 9 48 9 31V11z"/>
+  <path fill="url(#inside)" d="m36 10 20 6v15c0 13-7 23-20 31-13-8-20-18-20-31V16z"/>
+  <path fill="#34445B" d="M31 38h10l10 19H21z"/>
+  <path fill="#FFD43B" d="M35 41h2l1 5h-4zm-2 9h6l1 5h-8z"/>
+  <path fill="#EF4D57" stroke="#fff" stroke-linejoin="round" stroke-width="2" d="M36 14c-8 0-13 5-13 12 0 8 13 19 13 19s13-11 13-19c0-7-5-12-13-12z"/>
+  <circle cx="36" cy="26" r="6" fill="#fff"/>
+  <path fill="none" stroke="#20A65A" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.7" d="m33 26 2 2 4-5"/>
+</svg>
