@@ -79,7 +79,24 @@ function setPick(lat, lon, recenter) {
   saveReportForm();
   drawPick(recenter);
   const hint = $('#pickhint');
-  if (hint) hint.textContent = 'Ubicación marcada ✓';
+  if (hint) hint.textContent = 'Ubicación marcada ✓. Toca otra vez para ajustar el punto.';
+}
+function setPickerExpanded(expanded) {
+  const panel = $('#picker-panel');
+  if (!panel) return;
+  panel.classList.toggle('expanded', expanded);
+  document.body.classList.toggle('map-expanded', expanded);
+  const closeButton = $('#close-picker');
+  if (closeButton) closeButton.hidden = !expanded;
+  if (expanded) {
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    closeButton?.focus();
+  } else {
+    panel.removeAttribute('role');
+    panel.removeAttribute('aria-modal');
+  }
+  window.setTimeout(() => pickMap?.invalidateSize(), 0);
 }
 function initMaps() {
   if (!window.L) return;
@@ -109,7 +126,10 @@ function initMaps() {
       pickMap = map;
       pickLayer = L.layerGroup().addTo(map);
       drawPick(false);
-      map.on('click', e => setPick(e.latlng.lat, e.latlng.lng, false));
+      map.on('click', e => {
+        setPick(e.latlng.lat, e.latlng.lng, false);
+        setPickerExpanded(true);
+      });
     } else if (markerBounds.length > 1) {
       map.fitBounds(markerBounds, { padding: [28, 28], maxZoom: 14 });
     }
@@ -195,7 +215,7 @@ function vReportar() {
     <label for="addr">Dirección o referencia</label><input id="addr" value="${esc(f.addr || '')}" placeholder="Ej: Calle Prat con Calle Lira">
     <label class="hint"><input id="track-location" type="checkbox" ${f.track ? 'checked' : ''}> Si es un robo o asalto, compartir mi ubicación en vivo mientras la página esté abierta.</label>
     <button class="btn full ${S.type}" style="margin-top:18px" type="submit">Enviar reporte</button></form>
-    <div class="box"><h3>Marca la ubicación</h3><button type="button" class="btn gps" id="usegps">⌖ Usar mi ubicación</button>${mapHTML('picker')}<p class="hint" id="pickhint">${S.pick ? 'Ubicación marcada ✓' : 'Usa el GPS o toca el mapa para marcar dónde ocurre.'}</p></div></div>`;
+    <div class="box picker-panel" id="picker-panel"><div class="picker-head"><h3>Marca la ubicación</h3><button type="button" class="btn ghost sm" id="close-picker" hidden>Volver al formulario</button></div><button type="button" class="btn gps" id="usegps">⌖ Usar mi ubicación</button>${mapHTML('picker')}<p class="hint" id="pickhint">${S.pick ? 'Ubicación marcada ✓. Toca otra vez para ajustar el punto.' : 'Toca el mapa para ampliarlo y marcar dónde ocurre.'}</p></div></div>`;
 }
 function setCustomCategory() {
   const select = $('#cat'), input = $('#customcat');
@@ -395,6 +415,7 @@ document.addEventListener('click', async e => {
     setCustomCategory();
     return;
   }
+  if (t.closest('#close-picker')) { setPickerExpanded(false); return; }
   if (t.closest('[data-stop-tracking]')) { stopLiveTracking(); render(); return; }
   if (t.closest('#usegps')) { useGps(); return; }
   const bl = t.closest('[data-block]');
@@ -439,7 +460,10 @@ document.addEventListener('submit', async e => {
     } catch (err) { toast(err.message); }
   }
 });
-document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest?.('[data-pin]')) e.target.closest('[data-pin]').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#picker-panel')?.classList.contains('expanded')) { setPickerExpanded(false); return; }
+  if (e.key === 'Enter' && e.target.closest?.('[data-pin]')) e.target.closest('[data-pin]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+});
 window.addEventListener('hashchange', render);
 render().finally(() => setTimeout(() => $('#splash').classList.add('off'), 900));
 })();
