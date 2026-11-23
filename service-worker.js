@@ -1,12 +1,13 @@
-const CACHE_NAME = 'calle-segura-v11';
+const CACHE_NAME = 'calle-segura-v19';
 const APP_BASE = self.registration.scope;
 const appAsset = path => new URL(path, APP_BASE).href;
 const APP_SHELL = [
   appAsset(''),
   appAsset('index.html'),
-  appAsset('codigo.css?v=6'),
-  appAsset('app.js?v=15'),
+  appAsset('codigo.css?v=12'),
+  appAsset('app.js?v=21'),
   appAsset('logo-calle-segura.png'),
+  appAsset('logo-mark.svg'),
   appAsset('manifest.webmanifest')
 ];
 const API_PATH = new URL('api/', APP_BASE).pathname;
@@ -44,4 +45,5 @@ self.addEventListener('fetch', event => {
       return response;
     }))
   );
-});
+
+                      
