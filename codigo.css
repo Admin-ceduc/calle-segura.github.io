@@ -126,6 +126,7 @@ main>*:nth-child(n+4),.mmain>*:nth-child(n+4){animation-delay:.2s}
 .s-Nuevo{background:var(--mute)}.s-Visto{background:var(--g2)}.s-En-curso{background:var(--pr);color:#1B1200}.s-Resuelto{background:var(--ok)}
 
 /* ---------- formularios ---------- */
+[hidden]{display:none!important}
 label{display:block;margin:14px 0 5px;font-weight:600}
 input,select,textarea{width:100%;font:inherit;color:var(--ink);background:color-mix(in srgb,var(--bg) 70%,var(--surf));border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;transition:border-color .15s,box-shadow .15s}
 input::placeholder,textarea::placeholder{color:var(--mute);opacity:.8}
