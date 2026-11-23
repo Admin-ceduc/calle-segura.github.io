@@ -311,3 +311,45 @@ td select{width:auto;padding:6px 32px 6px 12px;border-radius:99px}
   .bar nav a.on{background:#fff;color:var(--g);box-shadow:0 2px 6px rgba(0,0,0,.12)}
   .bar nav a:not(.on):hover{background:rgba(255,255,255,.1)}
   main{padding:24px 16px 48px}
+  .hero,.home,.two,.steps,.grid2,.dash,.dcol .grid2{grid-template-columns:1fr}
+  .home{gap:0}.hero{gap:22px}
+  .hero .row{gap:8px}
+  .hero .row .btn{flex:1 1 100%;min-height:46px}
+  .hero .leaflet-map{border-width:6px;border-radius:24px}
+  .home .scene{order:1;min-height:330px}
+  .home .sheet{order:2;position:relative;margin-top:-40px;padding:26px 22px;background:var(--surf);border-radius:30px;box-shadow:var(--sh)}
+  .sheet .row .btn{flex:1 1 100%}
+  .ringcard{padding:8px 14px 8px 8px}.ring{width:54px;height:54px}.ring b{font-size:14px}
+  .stats{grid-template-columns:1fr 1fr}
+  .stats div{padding:12px 14px}.stats b{font-size:28px}
+  nav a{padding:10px 14px;font-size:14px;min-height:44px}
+  .muni{display:block;padding:0}
+  :root:has(.demo) .side,:root:has(.demo) .rail{height:auto}
+  .side{width:auto;height:auto;flex-direction:row;gap:2px;overflow:visible}
+  .side .org,.side .sub,.side .who{display:none}
+  .side a{padding:10px 14px;font-size:14px;gap:6px}
+  .rail{position:sticky;top:0;width:100%;height:auto;flex-wrap:wrap;gap:4px;padding:8px 12px;overflow:visible}
+  .rail .lg{flex:1 0 100%;padding:0 4px 4px}
+  .rail a:not(.lg){height:44px;padding:0 10px}
+  .rail .out{margin:0 0 0 auto}
+  .rail .out span{display:none}
+  .mmain{padding:22px 16px 40px}
+  .leaflet-map{height:330px;border-radius:16px}
+  .picker-panel.expanded{inset:0;border-radius:0}
+  .box{padding:16px}
+  .auth{margin:16px auto;padding:22px 18px 20px}
+  .profile{margin:16px auto;padding:22px 18px;gap:14px}
+  .types button,.btn{min-height:44px}
+  .seg{display:flex;width:100%}.seg button{flex:1;padding:9px 8px;min-height:44px}
+  .map-login{flex-direction:column;align-items:stretch}
+  .mmain{padding-bottom:40px}
+  .toast{right:16px;bottom:16px;max-width:calc(100% - 32px)}
+  .banner{padding:22px}
+}
+@media(max-width:420px){
+  .logo{font-size:15px}.logo img{width:36px;height:36px}
+  nav a{padding:10px 9px;font-size:13px}
+  .rail a:not(.lg){gap:6px;padding:0 8px;font-size:13px}
+  .sos{font-size:14px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
