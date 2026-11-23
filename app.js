@@ -65,7 +65,7 @@ function markerIcon(type) {
     popupAnchor: [0, -40]
   });
 }
-let pickMap = null, pickLayer = null;
+let pickMap = null, pickLayer = null, pickPanelPlaceholder = null;
 function drawPick(recenter) {
   if (!pickMap || !pickLayer || !S.pick || !document.body.contains(pickMap.getContainer())) return;
   const p = [S.pick.lat, S.pick.lon];
@@ -84,6 +84,15 @@ function setPick(lat, lon, recenter) {
 function setPickerExpanded(expanded) {
   const panel = $('#picker-panel');
   if (!panel) return;
+  if (expanded && !pickPanelPlaceholder) {
+    pickPanelPlaceholder = document.createComment('picker-panel');
+    panel.parentNode.insertBefore(pickPanelPlaceholder, panel);
+    document.body.append(panel);
+  } else if (!expanded && pickPanelPlaceholder?.parentNode) {
+    pickPanelPlaceholder.parentNode.insertBefore(panel, pickPanelPlaceholder);
+    pickPanelPlaceholder.remove();
+    pickPanelPlaceholder = null;
+  }
   panel.classList.toggle('expanded', expanded);
   document.body.classList.toggle('map-expanded', expanded);
   const closeButton = $('#close-picker');
@@ -95,6 +104,7 @@ function setPickerExpanded(expanded) {
   } else {
     panel.removeAttribute('role');
     panel.removeAttribute('aria-modal');
+    $('#pickmap')?.focus();
   }
   window.setTimeout(() => pickMap?.invalidateSize(), 0);
 }
@@ -457,13 +467,3 @@ document.addEventListener('submit', async e => {
       const created = await api('/api/reports', { method: 'POST', body: { email: S.user.email, type: S.type, category, emergency_service: service, description: $('#desc').value, address: $('#addr').value, latitude: S.pick.lat, longitude: S.pick.lon } });
       if (S.type === 'em' && category === 'Robo o asalto' && $('#track-location').checked) startLiveTracking(created.id);
       S.pick = null; S.form = {}; toast('Reporte enviado. ¡Gracias!'); go('/mapa');
-    } catch (err) { toast(err.message); }
-  }
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && $('#picker-panel')?.classList.contains('expanded')) { setPickerExpanded(false); return; }
-  if (e.key === 'Enter' && e.target.closest?.('[data-pin]')) e.target.closest('[data-pin]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-});
-window.addEventListener('hashchange', render);
-render().finally(() => setTimeout(() => $('#splash').classList.add('off'), 900));
-})();
