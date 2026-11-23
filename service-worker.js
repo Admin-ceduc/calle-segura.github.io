@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calle-segura-v21';
+const CACHE_NAME = 'calle-segura-v22';
 const APP_BASE = self.registration.scope;
 const appAsset = path => new URL(path, APP_BASE).href;
 const APP_SHELL = [
