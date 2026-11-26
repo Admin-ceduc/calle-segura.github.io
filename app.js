@@ -21,7 +21,12 @@ const STATUSES = ['Nuevo', 'Visto', 'En curso', 'Resuelto'];
 const LEBU_CENTER = [-37.6163, -73.6511];
 const B = { minLat: -37.66, maxLat: -37.57, minLon: -73.70, maxLon: -73.60 };
 const LEBU_BOUNDS = [[B.minLat, B.minLon], [B.maxLat, B.maxLon]];
-const S = { user: loadUser(), reports: [], users: [], filter: 'all', sel: null, type: 'em', pick: null, photo: null, form: {}, tracking: null };
+const S = {
+  user: loadUser(), reports: [], users: [], notifications: [],
+  filter: 'all', muniSearch: '', muniStatus: 'all', muniType: 'all',
+  muniPriority: 'all', muniAssignee: 'all',
+  sel: null, type: 'em', pick: null, photo: null, form: {}, tracking: null
+};
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const isStaff = () => S.user && ['staff', 'admin'].includes(S.user.role);
@@ -208,7 +213,7 @@ const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 function shell(route, body) {
   const on = r => route === r ? 'on' : '';
   const who = S.user ? `<a class="ava" href="#/perfil" title="Ver perfil de ${esc(S.user.email)}" aria-label="Ver mi perfil">${esc(S.user.email[0].toUpperCase())}</a>` : '<a class="btn pr sm" href="#/ingresar">Ingresar</a>';
-  return `<header><div class="bar"><a class="logo" href="#/"><img src="logo-mark.svg" alt=""><span>Calle Segura</span></a>
+  return `<header><div class="bar"><a class="logo" href="#/"><img src="logo-mark.svg?v=2" alt=""><span>Calle Segura</span></a>
     <nav aria-label="Principal"><a class="${on('')}" href="#/">Inicio</a><a class="${on('mapa')}" href="#/mapa">Mapa</a><a class="${on('reportar')}" href="#/reportar">Reportar</a></nav>${who}</div></header>
     <main class="view">${body}</main>`;
 }
@@ -419,7 +424,12 @@ function vPerfil() {
   if (!S.user) return `<div class="auth box"><h2>Ingresa para ver tu perfil</h2><a class="btn full" style="margin-top:14px" href="#/ingresar">Ingresar</a></div>`;
   const role = S.user.role === 'admin' ? 'Administrador/a' : S.user.role === 'staff' ? 'Funcionario/a municipal' : 'Vecino/a';
   const name = S.user.full_name || S.user.email.split('@')[0];
-  return `<section class="profile box"><div class="profile-avatar" aria-hidden="true">${esc(name[0].toUpperCase())}</div><div><p class="hint">Mi perfil</p><h2>${esc(name)}</h2><dl><div><dt>Correo</dt><dd>${esc(S.user.email)}</dd></div><div><dt>Tipo de cuenta</dt><dd>${role}</dd></div></dl><a class="btn full logout" href="#/salir">Cerrar sesion</a></div></section>`;
+  const notices = S.notifications.map(notification => `<article class="notice ${notification.is_read ? '' : 'unread'}">
+    <p>${esc(notification.message)}</p><small>${ago(notification.created_at)} · Reporte #${notification.report_id}</small>
+    ${notification.is_read ? '' : `<button class="btn ghost sm" type="button" data-read-notification="${notification.id}">Marcar como leída</button>`}
+  </article>`).join('');
+  return `<section class="profile box"><div class="profile-avatar" aria-hidden="true">${esc(name[0].toUpperCase())}</div><div><p class="hint">Mi perfil</p><h2>${esc(name)}</h2><dl><div><dt>Correo</dt><dd>${esc(S.user.email)}</dd></div><div><dt>Tipo de cuenta</dt><dd>${role}</dd></div></dl><a class="btn full logout" href="#/salir">Cerrar sesion</a></div></section>
+    <section class="box notification-list"><h3>Avisos de tus reportes</h3>${notices || '<p class="hint">Todavía no tienes avisos.</p>'}</section>`;
 }
 function vRegister() {
   return `<form class="auth box" id="regform"><div class="auth-brand"><img src="logo-calle-segura.png" alt="Calle Segura"><span>Únete a tu comunidad</span></div><h2>Crear <em>cuenta</em></h2><p class="hint">Regístrate para reportar y seguir situaciones de tu barrio.</p>
@@ -433,17 +443,97 @@ function vRegister() {
 /* ---------- portal municipal ---------- */
 function mResumen() {
   const c = s => S.reports.filter(r => r.status === s).length, max = Math.max(1, ...STATUSES.map(c));
-  const nuevos = S.reports.filter(r => r.status === 'Nuevo' || r.type === 'em' && r.status !== 'Resuelto').slice(0, 4);
-  return `<div class="banner"><div><h1>Panel <em>municipal</em></h1><p>${S.reports.filter(r => r.status === 'Nuevo').length} reportes nuevos esperan revisión.</p></div><a class="btn pr" href="#/muni/reportes">Gestionar reportes</a></div>
+  const abiertos = S.reports.filter(r => r.status !== 'Resuelto');
+  const urgentes = abiertos.filter(r => r.priority === 'Urgente').length;
+  const sinAsignar = abiertos.filter(r => !r.assigned_to).length;
+  const nuevos = prioritySort(abiertos).slice(0, 4);
+  return `<div class="banner"><div><h1>Panel <em>municipal</em></h1><p>${S.reports.filter(r => r.status === 'Nuevo').length} reportes nuevos esperan revisión.</p><p class="banner-alert">${urgentes} urgentes · ${sinAsignar} sin responsable</p></div><a class="btn pr" href="#/muni/reportes">Gestionar reportes</a></div>
     ${stats(S.reports)}
     <div class="grid2"><div class="box"><h3>Reportes por estado</h3><div class="bars">${STATUSES.map(s => `<div><b>${c(s)}</b><i style="height:${c(s) / max * 100}%"></i>${s}</div>`).join('')}</div></div>
-    <div class="box"><h3>Requieren atención</h3>${nuevos.map(reportCard).join('') || '<p class="hint">Todo al día 🎉</p>'}</div></div>
+    <div class="box"><h3>Requieren atención</h3>${nuevos.map(reportCard).join('') || '<p class="hint">Todo al día</p>'}</div></div>
     <div class="box" style="margin-top:16px"><h3>Mapa</h3>${mapHTML('all')}</div>`;
 }
+function prioritySort(reports) {
+  const priorityOrder = { Urgente: 0, Alta: 1, Normal: 2 };
+  return [...reports].sort((a, b) =>
+    (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2)
+    || (a.type === 'em' ? 0 : 1) - (b.type === 'em' ? 0 : 1)
+    || String(b.created_at).localeCompare(String(a.created_at))
+  );
+}
+function muniFilteredReports() {
+  const query = S.muniSearch.trim().toLocaleLowerCase();
+  return prioritySort(S.reports.filter(report => {
+    const searchable = [report.category, report.description, report.address, report.assigned_name, report.assigned_email]
+      .filter(Boolean).join(' ').toLocaleLowerCase();
+    return (!query || searchable.includes(query))
+      && (S.muniStatus === 'all' || report.status === S.muniStatus)
+      && (S.muniType === 'all' || report.type === S.muniType)
+      && (S.muniPriority === 'all' || (report.priority || 'Normal') === S.muniPriority)
+      && (S.muniAssignee === 'all' || (S.muniAssignee === 'none' ? !report.assigned_to : String(report.assigned_to) === S.muniAssignee));
+  }));
+}
+function muniReportRows() {
+  const staff = S.users.filter(user => ['staff', 'admin'].includes(user.role) && !user.is_blocked);
+  return muniFilteredReports().map(report => {
+    const needsDetails = !report.description?.trim() || !report.address?.trim();
+    const assignee = report.assigned_to ? String(report.assigned_to) : '';
+    return `<tr class="${report.priority === 'Urgente' || report.type === 'em' ? 'priority-row' : ''}">
+      <td><span class="tag ${report.type === 'em' ? 't-em' : 't-pr'}">${report.type === 'em' ? 'Emergencia' : 'Problema'}</span><br><span class="tag priority-tag p-${esc((report.priority || 'Normal').toLowerCase())}">${esc(report.priority || 'Normal')}</span></td>
+      <td>${esc(report.category)}${report.type === 'em' && report.emergency_service ? `<br><small class="hint">${esc(report.emergency_service)}</small>` : ''}</td>
+      <td>${esc(report.description || 'Sin descripción')}${needsDetails ? '<br><small class="missing-detail">Faltan datos</small>' : ''}</td>
+      <td>${esc(report.address || 'Sin dirección')}<br><a class="hint" href="https://www.openstreetmap.org/?mlat=${encodeURIComponent(report.latitude)}&mlon=${encodeURIComponent(report.longitude)}#map=18/${encodeURIComponent(report.latitude)}/${encodeURIComponent(report.longitude)}" target="_blank" rel="noopener">Ver en mapa</a></td>
+      <td>${ago(report.created_at)}</td>
+      <td>${report.has_photo && report.can_view_photo ? `<button type="button" class="btn ghost sm photo-view" data-view-photo="${report.id}">Ver foto</button>` : '—'}</td>
+      <td><select data-status="${report.id}" aria-label="Estado del reporte ${report.id}">${STATUSES.map(status => `<option ${status === report.status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
+      <td><select data-assignment="${report.id}" aria-label="Responsable del reporte ${report.id}"><option value="">Sin asignar</option>${staff.map(user => `<option value="${user.id}" ${String(user.id) === assignee ? 'selected' : ''}>${esc(user.full_name || user.email)}</option>`).join('')}</select></td>
+      <td><select data-priority="${report.id}" aria-label="Prioridad del reporte ${report.id}">${['Urgente', 'Alta', 'Normal'].map(priority => `<option ${priority === (report.priority || 'Normal') ? 'selected' : ''}>${priority}</option>`).join('')}</select></td>
+      <td><button class="btn ghost sm" type="button" data-history="${report.id}">Historial</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="10" class="hint">No hay reportes que coincidan con estos filtros.</td></tr>';
+}
 function mReportes() {
-  return `<h2>Reportes</h2><p class="hint">Cambia el estado para que los vecinos vean el avance.</p><div class="scroll"><table><thead><tr><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Ubicación</th><th>Hace</th><th>Foto</th><th>Estado</th></tr></thead><tbody>
-    ${S.reports.map(r => `<tr><td><span class="tag t-${r.type}">${r.type === 'em' ? 'Emergencia' : 'Problema'}</span></td><td>${esc(r.category)}${r.type === 'em' && r.emergency_service ? `<br><small class="hint">${esc(r.emergency_service)}</small>` : ''}</td><td>${esc(r.description || 'Sin descripción')}</td><td>${esc(r.address || 'Sin dirección')}<br><a class="hint" href="https://www.openstreetmap.org/?mlat=${encodeURIComponent(r.latitude)}&mlon=${encodeURIComponent(r.longitude)}#map=18/${encodeURIComponent(r.latitude)}/${encodeURIComponent(r.longitude)}" target="_blank" rel="noopener">Ver en mapa</a></td><td>${ago(r.created_at)}</td>
-    <td>${r.has_photo && r.can_view_photo ? `<button type="button" class="btn ghost sm photo-view" data-view-photo="${r.id}">Ver foto</button>` : '—'}</td><td><select data-status="${r.id}" aria-label="Estado">${STATUSES.map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`;
+  const staff = S.users.filter(user => ['staff', 'admin'].includes(user.role) && !user.is_blocked);
+  return `<h2>Reportes</h2><p class="hint">Ordenados por prioridad. Emergencias quedan destacadas; la antigüedad es informativa, sin plazo oficial configurado.</p>
+    <div class="muni-filters">
+      <label>Buscar<input id="muni-search" type="search" value="${esc(S.muniSearch)}" placeholder="Categoría, dirección o descripción"></label>
+      <label>Estado<select id="muni-status-filter"><option value="all">Todos</option>${STATUSES.map(status => `<option value="${status}" ${S.muniStatus === status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
+      <label>Tipo<select id="muni-type-filter"><option value="all">Todos</option><option value="em" ${S.muniType === 'em' ? 'selected' : ''}>Emergencia</option><option value="pr" ${S.muniType === 'pr' ? 'selected' : ''}>Problema</option></select></label>
+      <label>Prioridad<select id="muni-priority-filter"><option value="all">Todas</option>${['Urgente', 'Alta', 'Normal'].map(priority => `<option value="${priority}" ${S.muniPriority === priority ? 'selected' : ''}>${priority}</option>`).join('')}</select></label>
+      <label>Responsable<select id="muni-assignee-filter"><option value="all">Todos</option><option value="none" ${S.muniAssignee === 'none' ? 'selected' : ''}>Sin asignar</option>${staff.map(user => `<option value="${user.id}" ${S.muniAssignee === String(user.id) ? 'selected' : ''}>${esc(user.full_name || user.email)}</option>`).join('')}</select></label>
+    </div>
+    <p id="muni-result-count" class="hint">${muniFilteredReports().length} de ${S.reports.length} reportes</p>
+    <div class="scroll"><table class="muni-table"><thead><tr><th>Tipo / prioridad</th><th>Categoría</th><th>Descripción</th><th>Ubicación</th><th>Hace</th><th>Foto</th><th>Estado</th><th>Responsable</th><th>Prioridad</th><th></th></tr></thead><tbody>${muniReportRows()}</tbody></table></div>`;
+}
+function updateMuniReportRows() {
+  const body = document.querySelector('.muni-table tbody');
+  if (!body) return;
+  body.innerHTML = muniReportRows();
+  const count = $('#muni-result-count');
+  if (count) count.textContent = `${muniFilteredReports().length} de ${S.reports.length} reportes`;
+}
+async function showReportHistory(reportId) {
+  try {
+    const history = await api(`/api/reports/${reportId}/history`);
+    const labels = { status: 'Estado', assignment: 'Responsable', priority: 'Prioridad' };
+    const entries = history.map(event => {
+      const description = event.action === 'status'
+        ? `Estado: ${esc(event.new_value)}`
+        : `${esc(event.old_value || 'Sin asignar')} → ${esc(event.new_value || 'Sin asignar')}`;
+      return `<article class="history-entry"><div><b>${labels[event.action] || 'Actividad'}</b><small>${ago(event.created_at)} · ${esc(event.actor)}</small></div><p>${description}</p>${event.note ? `<p class="hint">${esc(event.note)}</p>` : ''}</article>`;
+    }).join('') || '<p class="hint">Este reporte aún no tiene actividad.</p>';
+    const dialog = document.createElement('dialog');
+    dialog.className = 'history-dialog';
+    dialog.innerHTML = `<div class="history-head"><h2>Historial del reporte #${esc(reportId)}</h2><button class="btn ghost sm" type="button" data-close-history>Cerrar</button></div><div class="history-entries">${entries}</div>`;
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog || event.target.closest('[data-close-history]')) dialog.close();
+    });
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
+  } catch (error) {
+    toast(error.message);
+  }
 }
 function mUsuarios() {
   return `<h2>Usuarios</h2><div class="scroll" style="margin-top:12px"><table><thead><tr><th>Correo</th><th>Rol</th><th>Reportes</th><th></th></tr></thead><tbody>
@@ -471,7 +561,7 @@ async function render(skipData = false) {
   }
   if (route === 'salir') {
     try { await api('/api/logout', { method: 'POST' }); } catch {}
-    S.user = null; S.reports = []; S.users = []; localStorage.removeItem('cs_user'); history.replaceState({}, '', '#/'); return render();
+    S.user = null; S.reports = []; S.users = []; S.notifications = []; localStorage.removeItem('cs_user'); history.replaceState({}, '', '#/'); return render();
   }
   if (!S.user) S.reports = [];
   const app = $('#app');
@@ -488,7 +578,7 @@ async function render(skipData = false) {
   if (route !== lastRoute) window.scrollTo(0, 0);
   lastRoute = route;
   if (S.user && !skipData) {
-    let shouldRefreshView = route === '' || route === 'mapa' || route.startsWith('muni');
+    let shouldRefreshView = route === '' || route === 'mapa' || route === 'perfil' || route.startsWith('muni');
     const requests = [api('/api/reports').then(reports => {
       if (generation === renderGeneration && routeFromLocation() === route) S.reports = reports;
     }).catch(error => {
@@ -498,14 +588,22 @@ async function render(skipData = false) {
         S.user = null;
         S.reports = [];
         S.users = [];
+        S.notifications = [];
         localStorage.removeItem('cs_user');
       } else {
         toast(error.message);
       }
     })];
-    if (route === 'muni/usuarios') {
+    if (route === 'muni/usuarios' || route === 'muni/reportes') {
       requests.push(api('/api/users?email=' + encodeURIComponent(S.user.email)).then(users => {
         if (generation === renderGeneration && routeFromLocation() === route) S.users = users;
+      }).catch(error => {
+        if (generation === renderGeneration && routeFromLocation() === route && error.status !== 401 && error.status !== 403) toast(error.message);
+      }));
+    }
+    if (route === 'perfil') {
+      requests.push(api('/api/notifications').then(notifications => {
+        if (generation === renderGeneration && routeFromLocation() === route) S.notifications = notifications;
       }).catch(error => {
         if (generation === renderGeneration && routeFromLocation() === route && error.status !== 401 && error.status !== 403) toast(error.message);
       }));
@@ -543,6 +641,19 @@ document.addEventListener('click', async e => {
   if (backStep) { setReportStep(+backStep.dataset.reportBack); return; }
   const photoButton = t.closest('[data-view-photo]');
   if (photoButton) { await showReportPhoto(photoButton); return; }
+  const historyButton = t.closest('[data-history]');
+  if (historyButton) { await showReportHistory(historyButton.dataset.history); return; }
+  const readButton = t.closest('[data-read-notification]');
+  if (readButton) {
+    try {
+      await api(`/api/notifications/${readButton.dataset.readNotification}/read`, { method: 'POST', body: {} });
+      S.notifications = S.notifications.map(notification => notification.id === Number(readButton.dataset.readNotification)
+        ? { ...notification, is_read: 1 }
+        : notification);
+      render(true);
+    } catch (error) { toast(error.message); }
+    return;
+  }
   const fl = t.closest('[data-filter]');
   if (fl) { S.filter = fl.dataset.filter; S.sel = null; render(); return; }
   const ty = t.closest('[data-type]');
@@ -589,9 +700,39 @@ document.addEventListener('change', async e => {
   }
   if (e.target.id === 'service') { saveReportForm(); setCategoryOptions(); setCustomCategory(); setReportPhotoVisibility(); return; }
   if (e.target.id === 'cat') { saveReportForm(); setCustomCategory(); return; }
+  if (e.target.id === 'muni-status-filter') { S.muniStatus = e.target.value; updateMuniReportRows(); return; }
+  if (e.target.id === 'muni-type-filter') { S.muniType = e.target.value; updateMuniReportRows(); return; }
+  if (e.target.id === 'muni-priority-filter') { S.muniPriority = e.target.value; updateMuniReportRows(); return; }
+  if (e.target.id === 'muni-assignee-filter') { S.muniAssignee = e.target.value; updateMuniReportRows(); return; }
+  const assignment = e.target.closest('[data-assignment]');
+  if (assignment) {
+    try {
+      await api(`/api/reports/${assignment.dataset.assignment}/assignment`, {
+        method: 'POST',
+        body: { user_id: assignment.value ? Number(assignment.value) : null }
+      });
+      toast('Responsable actualizado');
+      render();
+    } catch (error) { toast(error.message); }
+    return;
+  }
+  const priority = e.target.closest('[data-priority]');
+  if (priority) {
+    try {
+      await api(`/api/reports/${priority.dataset.priority}/priority`, { method: 'POST', body: { priority: priority.value } });
+      toast('Prioridad actualizada');
+      render();
+    } catch (error) { toast(error.message); }
+    return;
+  }
   const sel = e.target.closest('[data-status]');
   if (!sel) return;
   try { await api(`/api/reports/${sel.dataset.status}/status`, { method: 'POST', body: { email: S.user.email, status: sel.value } }); toast('Estado actualizado'); render(); } catch (err) { toast(err.message); }
+});
+document.addEventListener('input', e => {
+  if (e.target.id !== 'muni-search') return;
+  S.muniSearch = e.target.value;
+  updateMuniReportRows();
 });
 document.addEventListener('submit', async e => {
   e.preventDefault();
