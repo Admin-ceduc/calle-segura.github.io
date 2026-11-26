@@ -170,8 +170,9 @@ function initMaps() {
     const pick = kind === 'picker';
     const list = kind === 'filtered' ? S.reports.filter(r => S.filter === 'all' || r.type === S.filter) : S.reports;
     const point = pick ? S.pick : null;
-    const center = point ? [point.lat, point.lon] : LEBU_CENTER;
-    const map = L.map(el, { zoomControl: true, maxBounds: LEBU_BOUNDS, maxBoundsViscosity: 1 }).setView(center, point ? 16 : 14);
+    const selectedReport = !pick ? list.find(report => report.id === S.sel) : null;
+    const center = point ? [point.lat, point.lon] : selectedReport ? [selectedReport.latitude, selectedReport.longitude] : LEBU_CENTER;
+    const map = L.map(el, { zoomControl: true, maxBounds: LEBU_BOUNDS, maxBoundsViscosity: 1 }).setView(center, point ? 16 : selectedReport ? 17 : 14);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -194,7 +195,7 @@ function initMaps() {
         setPick(e.latlng.lat, e.latlng.lng, false);
         setPickerExpanded(true);
       });
-    } else if (markerBounds.length > 1) {
+    } else if (!selectedReport && markerBounds.length > 1) {
       map.fitBounds(markerBounds, { padding: [28, 28], maxZoom: 14 });
     }
     window.setTimeout(() => map.invalidateSize(), 0);
@@ -478,7 +479,7 @@ function muniReportRows() {
   return muniFilteredReports().map(report => {
     const needsDetails = !report.description?.trim() || !report.address?.trim();
     const assignee = report.assigned_to ? String(report.assigned_to) : '';
-    return `<tr class="${report.priority === 'Urgente' || report.type === 'em' ? 'priority-row' : ''}">
+    return `<tr class="${report.priority === 'Urgente' || report.type === 'em' ? 'priority-row' : ''}" data-report-map="${esc(report.id)}" tabindex="0" aria-label="Abrir ubicación del reporte ${esc(report.id)} en el mapa">
       <td><span class="tag ${report.type === 'em' ? 't-em' : 't-pr'}">${report.type === 'em' ? 'Emergencia' : 'Problema'}</span><br><span class="tag priority-tag p-${esc((report.priority || 'Normal').toLowerCase())}">${esc(report.priority || 'Normal')}</span></td>
       <td>${esc(report.category)}${report.type === 'em' && report.emergency_service ? `<br><small class="hint">${esc(report.emergency_service)}</small>` : ''}</td>
       <td>${esc(report.description || 'Sin descripción')}${needsDetails ? '<br><small class="missing-detail">Faltan datos</small>' : ''}</td>
@@ -653,6 +654,14 @@ async function render(skipData = false) {
   }
 }
 
+function openReportMap(reportId) {
+  const report = S.reports.find(item => String(item.id) === String(reportId));
+  if (!report) return;
+  S.sel = report.id;
+  S.filter = 'all';
+  go('mapa');
+}
+
 /* ---------- eventos ---------- */
 document.addEventListener('click', async e => {
   const t = e.target;
@@ -661,6 +670,11 @@ document.addEventListener('click', async e => {
     e.preventDefault();
     if (link.matches('[data-clear]')) S.sel = null;
     go(link.getAttribute('href').slice(1));
+    return;
+  }
+  const reportRow = t.closest('tr[data-report-map]');
+  if (reportRow && !t.closest('a,button,input,select,textarea,[contenteditable="true"]')) {
+    openReportMap(reportRow.dataset.reportMap);
     return;
   }
   if (t.closest('[data-export-reports]')) { exportMuniReports(); return; }
@@ -813,6 +827,12 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && $('#picker-panel')?.classList.contains('expanded')) { setPickerExpanded(false); return; }
+  const reportRow = e.target.closest?.('tr[data-report-map]');
+  if ((e.key === 'Enter' || e.key === ' ') && reportRow && e.target === reportRow) {
+    e.preventDefault();
+    openReportMap(reportRow.dataset.reportMap);
+    return;
+  }
   if (e.key === 'Enter' && e.target.closest?.('[data-pin]')) e.target.closest('[data-pin]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
 });
 window.addEventListener('hashchange', render);

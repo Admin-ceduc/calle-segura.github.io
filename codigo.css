@@ -269,6 +269,8 @@ td select{width:auto;padding:6px 32px 6px 12px;border-radius:99px}
 .report-toolbar p{margin:0}
 .report-toolbar .btn{flex:none}
 .muni-table{min-width:1180px}
+.muni-table tbody tr[data-report-map]{cursor:pointer}
+.muni-table tbody tr[data-report-map]:focus-visible td{outline:2px solid var(--g2);outline-offset:-2px}
 .priority-row td:first-child{box-shadow:inset 4px 0 var(--em)}
 .priority-tag{margin-top:5px}
 .p-urgente{background:var(--em)}.p-alta{background:#B66A00}.p-normal{background:var(--mute)}
