@@ -494,7 +494,7 @@ function muniReportRows() {
 }
 function mReportes() {
   const staff = S.users.filter(user => ['staff', 'admin'].includes(user.role) && !user.is_blocked);
-  return `<h2>Reportes</h2><p class="hint">Ordenados por prioridad. Emergencias quedan destacadas; la antigüedad es informativa, sin plazo oficial configurado.</p>
+  return `<div class="report-toolbar"><div><h2>Reportes</h2><p class="hint">Ordenados por prioridad. Emergencias quedan destacadas; la antigüedad es informativa, sin plazo oficial configurado.</p></div><button class="btn ghost" type="button" data-export-reports>Exportar CSV</button></div>
     <div class="muni-filters">
       <label>Buscar<input id="muni-search" type="search" value="${esc(S.muniSearch)}" placeholder="Categoría, dirección o descripción"></label>
       <label>Estado<select id="muni-status-filter"><option value="all">Todos</option>${STATUSES.map(status => `<option value="${status}" ${S.muniStatus === status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
@@ -504,6 +504,45 @@ function mReportes() {
     </div>
     <p id="muni-result-count" class="hint">${muniFilteredReports().length} de ${S.reports.length} reportes</p>
     <div class="scroll"><table class="muni-table"><thead><tr><th>Tipo / prioridad</th><th>Categoría</th><th>Descripción</th><th>Ubicación</th><th>Hace</th><th>Foto</th><th>Estado</th><th>Responsable</th><th>Prioridad</th><th></th></tr></thead><tbody>${muniReportRows()}</tbody></table></div>`;
+}
+function csvCell(value) {
+  const text = String(value ?? '');
+  const safe = /^[\u0000-\u0020]*[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+function exportMuniReports() {
+  const reports = muniFilteredReports();
+  if (!reports.length) {
+    toast('No hay reportes para exportar');
+    return;
+  }
+  const columns = [
+    ['Folio', report => report.id],
+    ['Tipo', report => report.type === 'em' ? 'Emergencia' : 'Problema'],
+    ['Categoría', report => report.category],
+    ['Servicio', report => report.emergency_service],
+    ['Descripción', report => report.description],
+    ['Dirección', report => report.address],
+    ['Estado', report => report.status],
+    ['Prioridad', report => report.priority || 'Normal'],
+    ['Responsable', report => report.assigned_name],
+    ['Creado', report => report.created_at],
+    ['Actualizado', report => report.updated_at]
+  ];
+  const rows = [
+    columns.map(([label]) => csvCell(label)).join(','),
+    ...reports.map(report => columns.map(([, value]) => csvCell(value(report))).join(','))
+  ];
+  const blob = new Blob([`\ufeff${rows.join('\r\n')}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `calle-segura-reportes-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function updateMuniReportRows() {
   const body = document.querySelector('.muni-table tbody');
@@ -624,6 +663,7 @@ document.addEventListener('click', async e => {
     go(link.getAttribute('href').slice(1));
     return;
   }
+  if (t.closest('[data-export-reports]')) { exportMuniReports(); return; }
   const pin = t.closest('[data-pin]');
   if (pin) { S.sel = +pin.dataset.pin; render(); return; }
   if (t.closest('[data-clear]')) { S.sel = null; }

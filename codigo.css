@@ -264,6 +264,10 @@ td select{width:auto;padding:6px 32px 6px 12px;border-radius:99px}
 .muni-filters{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin:16px 0 8px;padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--glass)}
 .muni-filters label{min-width:0;margin:0;font-size:13px}
 .muni-filters input,.muni-filters select{margin-top:4px;padding:9px 34px 9px 11px;font-size:14px}
+.report-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}
+.report-toolbar h2{margin-bottom:4px}
+.report-toolbar p{margin:0}
+.report-toolbar .btn{flex:none}
 .muni-table{min-width:1180px}
 .priority-row td:first-child{box-shadow:inset 4px 0 var(--em)}
 .priority-tag{margin-top:5px}
@@ -346,6 +350,7 @@ td select{width:auto;padding:6px 32px 6px 12px;border-radius:99px}
   .stats{grid-template-columns:1fr 1fr}
   .stats div{padding:12px 14px}.stats b{font-size:28px}
   .muni-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .report-toolbar{align-items:stretch;flex-direction:column}
   nav a{padding:10px 14px;font-size:14px;min-height:44px}
   .muni{display:block;padding:0}
   :root:has(.demo) .side,:root:has(.demo) .rail{height:auto}
