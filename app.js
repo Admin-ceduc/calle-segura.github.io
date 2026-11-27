@@ -183,7 +183,9 @@ function initMaps() {
       markerBounds.push(position);
       const marker = L.marker(position, { icon: markerIcon(r.type), title: r.category }).addTo(map);
       const service = r.type === 'em' && r.emergency_service ? `<br><small>Servicio: ${esc(r.emergency_service)}</small>` : '';
-      marker.bindPopup(`<strong>${esc(r.category)}</strong>${service}<br>${esc(r.description || 'Sin descripción')}<br><small>${esc(r.address || 'Sin dirección')}</small>`);
+      const description = r.description ? `<br>${esc(r.description)}` : '';
+      const address = r.address ? `<br><small>${esc(r.address)}</small>` : '';
+      marker.bindPopup(`<strong>${esc(r.category)}</strong>${service}${description}${address}<br><small>${esc(r.status)}</small>`);
       if (!pick) marker.on('click', () => { S.sel = r.id; render(); });
       if (!pick && S.sel === r.id) marker.openPopup();
     });
@@ -237,13 +239,11 @@ function stats(list) {
 }
 function vInicio() {
   const passkeyAction = S.user ? '<button class="btn ghost" type="button" id="register-passkey">🔐 Activar huella</button>' : '';
-  const welcomePanel = S.user
-    ? `<div class="herocard">${mapHTML('all')}</div>`
-    : `<div class="hero-access box"><div class="access-icon">⌖</div><h3>Ingresa para continuar</h3><p>Para ver el mapa y reportar una situación necesitas iniciar sesión.</p><a class="btn pr full" href="#/ingresar">Ingresar ahora</a><small>Acceso con correo y contraseña</small></div>`;
+  const welcomePanel = `<div class="herocard">${mapHTML('all')}<p class="hint">El mapa público muestra emergencias no sensibles con ubicación aproximada. Los problemas solo aparecen para quien los reportó y el personal municipal.</p></div>`;
   return `<section class="hero"><div><h1>Tu calle, <em>más segura</em> entre todos.</h1>
     <p class="lead">Reporta emergencias y problemas de tu barrio en segundos y sigue cómo la municipalidad responde.</p>
     <div class="row"><a class="btn em" href="#/reportar">Reportar ahora</a><a class="btn ghost" href="#/mapa">Ver el mapa</a>${passkeyAction}</div>
-    <div class="sos"><b>¿Emergencia en curso?</b> Llama primero al 133 (Carabineros), 132 (Bomberos) o 131 (Ambulancia).</div></div>
+    <div class="sos"><b>¿Emergencia en curso? Llama primero:</b><a href="tel:133">133 Carabineros</a><a href="tel:132">132 Bomberos</a><a href="tel:131">131 Ambulancia</a></div></div>
     ${welcomePanel}</section>
     ${stats(S.reports)}
     <h2>Así funciona</h2><div class="steps">
@@ -254,12 +254,16 @@ function vInicio() {
 function reportCard(r) {
   const service = r.type === 'em' && r.emergency_service ? `<small>Servicio: ${esc(r.emergency_service)}</small>` : '';
   const photo = r.has_photo && r.can_view_photo ? `<button type="button" class="btn ghost sm photo-view" data-view-photo="${r.id}">📷 Ver foto</button>` : '';
-  return `<div class="card" data-card="${r.id}"><div class="top"><div>${tag(r)}</div><small>${ago(r.created_at)}</small></div><h3>${esc(r.category)}</h3>${service}<p>${esc(r.description || 'Sin descripción')}</p><small>${esc(r.address || 'Sin dirección')}</small>${photo}</div>`;
+  const description = r.description ? `<p>${esc(r.description)}</p>` : '';
+  const address = r.address ? `<small>${esc(r.address)}</small>` : '';
+  const publicHint = r.public_view ? '<small class="hint">Ubicación aproximada; detalles privados ocultos.</small>' : '';
+  return `<div class="card" data-card="${r.id}"><div class="top"><div>${tag(r)}</div><small>${ago(r.created_at)}</small></div><h3>${esc(r.category)}</h3>${service}${description}${address}${publicHint}${photo}</div>`;
 }
 function vMapa() {
-  if (!S.user) return `<div class="auth box"><h2>Ingresa para reportar</h2><p class="hint">Inicia sesión para ver el mapa y gestionar tus reportes.</p><a class="btn full" style="margin-top:14px" href="#/ingresar">Ingresar</a></div>`;
+
   const list = S.reports.filter(r => S.filter === 'all' || r.type === S.filter);
-  const seg = [['all', 'Todos'], ['em', 'Emergencias'], ['pr', 'Problemas']].map(([k, l]) => `<button class="${S.filter === k ? 'on' : ''}" data-filter="${k}">${l}</button>`).join('');
+  const filters = S.user ? [['all', 'Todos'], ['em', 'Emergencias'], ['pr', 'Problemas']] : [['all', 'Emergencias']];
+  const seg = filters.map(([k, l]) => `<button class="${S.filter === k ? 'on' : ''}" data-filter="${k}">${l}</button>`).join('');
   const shown = S.sel ? list.filter(r => r.id === S.sel) : list;
   const reportAction = S.user
     ? '<a class="btn pr" href="#/reportar">Crear reporte</a>'
@@ -269,7 +273,9 @@ function vMapa() {
     <div>${shown.map(reportCard).join('') || '<p class="hint">No hay reportes.</p>'}${S.tracking ? `<div class="box" style="margin-top:16px"><b>Seguimiento de emergencia activo</b><p class="hint">Tu ubicación se comparte mientras esta página permanezca abierta.</p><button class="btn ghost" type="button" data-stop-tracking>Detener seguimiento</button></div>` : ''}</div></div>`;
 }
 function vReportar() {
-  if (!S.user) return `<div class="auth box"><h2>Ingresa para reportar</h2><p class="hint">Necesitas una cuenta para que podamos hacer seguimiento.</p><a class="btn full" style="margin-top:14px" href="#/ingresar">Ingresar</a></div>`;
+  if (!S.user) return `<h2>¿Necesitas ayuda ahora?</h2>
+    <aside class="report-emergency" aria-label="Teléfonos de emergencia"><b>Si hay peligro inmediato, llama primero; este sitio no despacha emergencias.</b><a href="tel:133">133 Carabineros</a><a href="tel:132">132 Bomberos</a><a href="tel:131">131 Ambulancia</a></aside>
+    <div class="auth box"><h2>Reportar en Calle Segura</h2><p class="hint">Para enviar un reporte y hacer seguimiento, ingresa o crea una cuenta. Si no tienes cuenta, puedes registrarte rápidamente.</p><a class="btn full" style="margin-top:14px" href="#/ingresar">Ingresar</a><a class="btn ghost full" style="margin-top:10px" href="#/registrar">Crear una cuenta</a></div>`;
   const f = S.form;
   const categories = S.type === 'em' ? (CATS.em[f.service || 'Carabineros'] || CATS.em.Carabineros) : CATS.pr;
   return `<h2 id="report-title">Nuevo <em>reporte</em></h2>
@@ -601,9 +607,9 @@ async function render(skipData = false) {
   }
   if (route === 'salir') {
     try { await api('/api/logout', { method: 'POST' }); } catch {}
-    S.user = null; S.reports = []; S.users = []; S.notifications = []; localStorage.removeItem('cs_user'); history.replaceState({}, '', '#/'); return render();
+    S.user = null; S.reports = []; S.users = []; S.notifications = []; S.filter = 'all'; S.sel = null; localStorage.removeItem('cs_user'); history.replaceState({}, '', '#/'); return render();
   }
-  if (!S.user) S.reports = S.reports.filter(report => report.public_view);
+  if (!S.user) { S.reports = S.reports.filter(report => report.public_view); S.filter = 'all'; S.sel = null; }
   const app = $('#app');
   if (route.startsWith('muni')) {
     if (!isStaff()) { return go('/ingresar', true); }
@@ -629,6 +635,8 @@ async function render(skipData = false) {
         S.reports = [];
         S.users = [];
         S.notifications = [];
+        S.filter = 'all';
+        S.sel = null;
         localStorage.removeItem('cs_user');
       } else {
         toast(error.message);
