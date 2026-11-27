@@ -224,9 +224,9 @@ footer{padding:22px;text-align:center;font-size:14px;color:var(--mute)}
 .banner .banner-alert{margin-top:5px;color:#fff;font-weight:700}
 .dash{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
 .dcol{display:flex;flex-direction:column;gap:16px;min-width:0}.dcol .stats{margin:0}
-.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
 .dcol .grid2{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
-.bars{display:flex;align-items:flex-end;gap:14px;height:170px;padding-top:10px}
+.bars{display:flex;align-items:flex-end;gap:14px;height:130px;padding-top:10px}
 .bars div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%;font-size:13px;color:var(--mute)}
 .bars b{color:var(--ink)}
 .bars i{width:100%;max-width:56px;min-height:8px;border-radius:99px;background:linear-gradient(var(--g2),var(--g))}
@@ -274,6 +274,18 @@ td select{width:auto;padding:6px 32px 6px 12px;border-radius:99px}
 .priority-row td:first-child{box-shadow:inset 4px 0 var(--em)}
 .priority-tag{margin-top:5px}
 .p-urgente{background:var(--em)}.p-alta{background:#B66A00}.p-normal{background:var(--mute)}
+.muni-queue-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.muni-queue-head h3{margin-bottom:0}
+.muni-queue-head .hint{margin:2px 0 0}
+.muni-queue-card{margin-top:10px}
+.muni-queue-card h3{margin-top:8px}
+.muni-queue-card .top{align-items:flex-start}
+.muni-queue-card .top>small{white-space:nowrap}
+.muni-queue-summary{display:-webkit-box;margin:6px 0 10px;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:var(--mute);font-size:14px}
+.muni-queue-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.muni-queue-controls label{min-width:0;margin:0;font-size:12px;color:var(--mute)}
+.muni-queue-controls select{margin-top:3px;padding:8px 30px 8px 10px;font-size:14px}
+.muni-queue-card .btn{min-height:36px}
 .missing-detail{display:inline-block;margin-top:4px;padding:2px 7px;border-radius:99px;background:color-mix(in srgb,var(--em) 14%,var(--surf));color:var(--em);font-weight:700}
 .notification-list{max-width:760px;margin:0 auto 24px}
 .notice{display:grid;gap:5px;margin-top:10px;padding:13px 15px;border:1px solid var(--line);border-radius:16px;background:var(--glass)}
@@ -352,6 +364,7 @@ td select{width:auto;padding:6px 32px 6px 12px;border-radius:99px}
   .stats{grid-template-columns:1fr 1fr}
   .stats div{padding:12px 14px}.stats b{font-size:28px}
   .muni-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .muni-queue-controls{grid-template-columns:1fr}
   .report-toolbar{align-items:stretch;flex-direction:column}
   nav a{padding:10px 14px;font-size:14px;min-height:44px}
   .muni{display:block;padding:0}
