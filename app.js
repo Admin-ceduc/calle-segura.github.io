@@ -172,7 +172,7 @@ function initMaps() {
     const point = pick ? S.pick : null;
     const selectedReport = !pick ? list.find(report => report.id === S.sel) : null;
     const center = point ? [point.lat, point.lon] : selectedReport ? [selectedReport.latitude, selectedReport.longitude] : LEBU_CENTER;
-    const map = L.map(el, { zoomControl: true, maxBounds: LEBU_BOUNDS, maxBoundsViscosity: 1 }).setView(center, point ? 16 : selectedReport ? 17 : 14);
+    const map = L.map(el, { zoomControl: true, scrollWheelZoom: false, dragging: pick || !L.Browser.touch, maxBounds: LEBU_BOUNDS, maxBoundsViscosity: 1 }).setView(center, point ? 16 : selectedReport ? 17 : 14);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
