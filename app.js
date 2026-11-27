@@ -617,7 +617,7 @@ async function render(skipData = false) {
   document.querySelectorAll('#passkey-login, #register-passkey').forEach(button => button.remove());
   if (route !== lastRoute) window.scrollTo(0, 0);
   lastRoute = route;
-  if (S.user && !skipData) {
+  if (!skipData && (S.user || route === '' || route === 'mapa')) {
     let shouldRefreshView = route === '' || route === 'mapa' || route === 'perfil' || route.startsWith('muni');
     const requests = [api('/api/reports').then(reports => {
       if (generation === renderGeneration && routeFromLocation() === route) S.reports = reports;
