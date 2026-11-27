@@ -453,19 +453,36 @@ function mResumen() {
   const abiertos = S.reports.filter(r => r.status !== 'Resuelto');
   const urgentes = abiertos.filter(r => r.priority === 'Urgente').length;
   const sinAsignar = abiertos.filter(r => !r.assigned_to).length;
-  const nuevos = prioritySort(abiertos).slice(0, 4);
-  return `<div class="banner"><div><h1>Panel <em>municipal</em></h1><p>${S.reports.filter(r => r.status === 'Nuevo').length} reportes nuevos esperan revisión.</p><p class="banner-alert">${urgentes} urgentes · ${sinAsignar} sin responsable</p></div><a class="btn pr" href="#/muni/reportes">Gestionar reportes</a></div>
+  const pendientes = prioritySort(abiertos).slice(0, 4);
+  return `<div class='banner'><div><h1>Panel <em>municipal</em></h1><p>${S.reports.filter(r => r.status === 'Nuevo').length} reportes nuevos esperan revisión.</p><p class='banner-alert'>${urgentes} urgentes · ${sinAsignar} sin responsable</p></div><a class='btn pr' href='#/muni/reportes'>Gestionar reportes</a></div>
     ${stats(S.reports)}
-    <div class="grid2"><div class="box"><h3>Reportes por estado</h3><div class="bars">${STATUSES.map(s => `<div><b>${c(s)}</b><i style="height:${c(s) / max * 100}%"></i>${s}</div>`).join('')}</div></div>
-    <div class="box"><h3>Requieren atención</h3>${nuevos.map(reportCard).join('') || '<p class="hint">Todo al día</p>'}</div></div>
-    <div class="box" style="margin-top:16px"><h3>Mapa</h3>${mapHTML('all')}</div>`;
+    <div class='grid2 muni-summary-grid'><div class='box'><h3>Reportes por estado</h3><div class='bars'>${STATUSES.map(s => `<div><b>${c(s)}</b><i style='height:${c(s) / max * 100}%'></i>${s}</div>`).join('')}</div></div>
+    <section class='box muni-queue'><div class='muni-queue-head'><div><h3>Atención prioritaria</h3><p class='hint'>${abiertos.length} abiertos · ${sinAsignar} sin responsable</p></div><a href='#/muni/reportes'>Ver todos</a></div>
+      ${pendientes.map(municipalQueueCard).join('') || '<p class=hint>Todo al día</p>'}</section></div>
+    <div class='box' style='margin-top:16px'><h3>Mapa</h3>${mapHTML('all')}</div>`;
+}
+function municipalQueueCard(report) {
+  const staff = S.users.filter(user => ['staff', 'admin'].includes(user.role) && !user.is_blocked);
+  const assignee = report.assigned_to ? String(report.assigned_to) : '';
+  const priority = report.priority || 'Normal';
+  const summary = report.description || report.address || 'Sin detalles adicionales';
+  return `<article class='card muni-queue-card'>
+    <div class='top'><div class='tags'><span class='tag ${report.type === 'em' ? 't-em' : 't-pr'}'>${report.type === 'em' ? 'Emergencia' : 'Problema'}</span><span class='tag p-${esc(priority.toLowerCase())}'>${esc(priority)}</span><span class='tag s-${report.status.replace(' ', '-')}'>${esc(report.status)}</span></div><small>${ago(report.created_at)}</small></div>
+    <h3>${esc(report.category)}</h3>${report.type === 'em' && report.emergency_service ? `<small>Servicio: ${esc(report.emergency_service)}</small>` : ''}
+    <p class='muni-queue-summary'>${esc(summary)}</p>
+    <div class='muni-queue-controls'>
+      <label>Responsable<select data-assignment='${report.id}' aria-label='Responsable del reporte ${report.id}'><option value=''>Sin asignar</option>${staff.map(user => `<option value='${user.id}' ${String(user.id) === assignee ? 'selected' : ''}>${esc(user.full_name || user.email)}</option>`).join('')}</select></label>
+      <label>Estado<select data-status='${report.id}' aria-label='Estado del reporte ${report.id}'>${STATUSES.map(status => `<option ${status === report.status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
+    </div>
+    ${report.status === 'Nuevo' ? `<button class='btn ghost sm' type='button' data-mark-seen='${report.id}'>Marcar visto</button>` : ''}
+  </article>`;
 }
 function prioritySort(reports) {
   const priorityOrder = { Urgente: 0, Alta: 1, Normal: 2 };
   return [...reports].sort((a, b) =>
     (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2)
     || (a.type === 'em' ? 0 : 1) - (b.type === 'em' ? 0 : 1)
-    || String(b.created_at).localeCompare(String(a.created_at))
+    || String(a.created_at).localeCompare(String(b.created_at))
   );
 }
 function muniFilteredReports() {
@@ -642,7 +659,7 @@ async function render(skipData = false) {
         toast(error.message);
       }
     })];
-    if (route === 'muni/usuarios' || route === 'muni/reportes') {
+    if (route === 'muni' || route === 'muni/usuarios' || route === 'muni/reportes') {
       requests.push(api('/api/users?email=' + encodeURIComponent(S.user.email)).then(users => {
         if (generation === renderGeneration && routeFromLocation() === route) S.users = users;
       }).catch(error => {
@@ -705,6 +722,18 @@ document.addEventListener('click', async e => {
   if (photoButton) { await showReportPhoto(photoButton); return; }
   const historyButton = t.closest('[data-history]');
   if (historyButton) { await showReportHistory(historyButton.dataset.history); return; }
+  const markSeenButton = t.closest('[data-mark-seen]');
+  if (markSeenButton) {
+    try {
+      await api(`/api/reports/${markSeenButton.dataset.markSeen}/status`, {
+        method: 'POST',
+        body: { email: S.user.email, status: 'Visto' }
+      });
+      toast('Reporte marcado como visto');
+      render();
+    } catch (error) { toast(error.message); }
+    return;
+  }
   const readButton = t.closest('[data-read-notification]');
   if (readButton) {
     try {
