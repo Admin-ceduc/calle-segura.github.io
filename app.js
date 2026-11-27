@@ -603,7 +603,7 @@ async function render(skipData = false) {
     try { await api('/api/logout', { method: 'POST' }); } catch {}
     S.user = null; S.reports = []; S.users = []; S.notifications = []; localStorage.removeItem('cs_user'); history.replaceState({}, '', '#/'); return render();
   }
-  if (!S.user) S.reports = [];
+  if (!S.user) S.reports = S.reports.filter(report => report.public_view);
   const app = $('#app');
   if (route.startsWith('muni')) {
     if (!isStaff()) { return go('/ingresar', true); }
